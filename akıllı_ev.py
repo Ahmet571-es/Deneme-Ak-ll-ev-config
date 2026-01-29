@@ -241,18 +241,14 @@ elif st.session_state.page == "main_app":
         with st.chat_message(msg["role"], avatar="👤" if msg["role"]=="user" else "🧠"):
             st.markdown(msg["content"])
 
-    # KOMUT GİRİŞ ALANI (GÜNCELLENDİ)
-    
-    # 1. Hazır Listeden Seçim
+    # KOMUT GİRİŞ ALANI (HIZLI MENÜ + INPUT)
     st.markdown("### 👇 Ne yapmak istersiniz?")
     selected_command = st.selectbox("Hazır Komut Menüsü:", PRESET_COMMANDS, label_visibility="collapsed")
-    
     col_submit_1, col_submit_2 = st.columns([1, 4])
     apply_btn = col_submit_1.button("Bunu Uygula ▶️")
     
-    # Komut Belirleme (Öncelik: Ses > Liste Butonu > Yazı)
+    # Komut Belirleme
     final_prompt = None
-
     if decoded_text:
         final_prompt = decoded_text
     elif apply_btn and selected_command != "Seçiniz... (Veya aşağıya kendiniz yazın)":
@@ -260,7 +256,7 @@ elif st.session_state.page == "main_app":
     elif chat_input := st.chat_input("Veya buraya kendi cümlenizi yazın..."):
         final_prompt = chat_input
 
-    # --- GROK MANTIK ---
+    # --- GROK MANTIK (SENİN İSTEDİĞİN DETAYLI PROMPT) ---
     if final_prompt:
         st.session_state.messages.append({"role": "user", "content": final_prompt})
         with st.chat_message("user", avatar="👤"): st.markdown(final_prompt)
@@ -269,40 +265,104 @@ elif st.session_state.page == "main_app":
             placeholder = st.empty()
             placeholder.markdown("⏳ *ÇETİN AI düşünüyor...*")
 
+            # SENİN HAZIRLADIĞIN ÖZEL SYSTEM PROMPT (HARFİ HARFİNE)
             system_prompt = f"""
             Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et, mantık yürüt. Kullanıcının adı {st.session_state.user_name}.
             Şu an Ankara'da hava {temp}°C ve {desc}. Bu bilgiyi koşullar için akıllıca kullan.
 
-            Kontrole açık entity'ler (konfor odaklı):
-            - light.salon_isigi, light.yatak_odasi_isigi, light.mutfak_isigi
-            - climate.klima, fan.fan_salon, cover.perde_salon
-            - media_player.tv_salon, media_player.muzik_sistemi
-            - switch.kahve_makinesi, switch.cay_makinesi, switch.robot_supurge
-            - scene.sabah_rutini, scene.aksam_rahatlama, scene.film_gecesi, scene.misafir_modu, scene.calisma_modu, scene.enerji_tasarrufu
+            Önce komutu adım adım içsel olarak analiz et:
+            1. Kullanıcının ana niyetini ve bağlamını belirle.
+            2. Hangi entity'ler etkilenecek?
+            3. Ek parametreler var mı? (parlaklık, renk, sıcaklık, transition saniye).
+            4. Zamanlayıcı, tekrarlayan eylem veya sahne var mı?
+            5. Koşullu mantık var mı? (Eğer... ise... – sensör sorgula, hava durumu, saat, kullanıcı konumu kullan).
+            6. Hava durumu, saat veya kullanıcı alışkanlığına göre proaktif öneri yap.
+            7. Güvenlik: Çakışan komutları önle, gereksiz enerji tüketimini azalt.
 
-            Few-shot örnekler (KOŞULLU MANTIK DAHİL):
-            Kullanıcı: "Eğer salon sıcaksa klimayı aç"
-            Çıktı: {{"actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}}], "response": "Salonun sıcaklığını kontrol ettim, klimayı 22 dereceye ayarladım {st.session_state.user_name}."}}
+            Kontrole açık entity'ler (konfor odaklı):
+            - light.salon_isigi → Salon ışığı (aç/kapat, parlaklık %, RGB renk, transition saniye)
+            - light.yatak_odasi_isigi → Yatak odası ışığı
+            - light.mutfak_isigi → Mutfak ışığı
+            - climate.klima → Klima (sıcaklık, mod)
+            - fan.fan_salon → Salon fanı
+            - cover.perde_salon → Salon perdesi
+            - media_player.tv_salon → Salon TV
+            - media_player.muzik_sistemi → Müzik sistemi
+            - switch.kahve_makinesi → Kahve makinesi
+            - switch.cay_makinesi → Çay makinesi
+            - switch.robot_supurge → Robot süpürge
+            - scene.sabah_rutini → Sabah rutini
+            - scene.aksam_rahatlama → Akşam rahatlama
+            - scene.film_gecesi → Film gecesi
+            - scene.misafir_modu → Misafir modu
+            - scene.calisma_modu → Çalışma modu
+            - scene.enerji_tasarrufu → Enerji tasarrufu
+
+            Few-shot örnekler (KOŞULLU KOMUTLAR ÇOK DAHA FAZLA VE DETAYLI EKLENDİ):
+            Kullanıcı: "Eğer salon sıcaksa klimayı aç, yoksa fanı aç"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}}], "response": "Salon sıcaklığını kontrol ediyorum... Buna göre klimayı açtım {st.session_state.user_name}!"}}
 
             Kullanıcı: "Eğer hareket yoksa salon ışığını kapat"
-            Çıktı: {{"actions": [{{"entity_id": "light.salon_isigi", "state": "off"}}], "response": "Salonda hareket görmediğim için ışığı kapattım."}}
+            Çıktı: {{"queries": [{{"entity_id": "binary_sensor.hareket_salon"}}], "actions": [{{"entity_id": "light.salon_isigi", "state": "off"}}], "response": "Salonda hareket olup olmadığını kontrol ediyorum... Yoksa ışığı kapatacağım {st.session_state.user_name}."}}
 
             Kullanıcı: "Eğer dışarı soğuksa ısıtıcıyı aç ve perdeyi kapat"
-            Çıktı: {{"actions": [{{"entity_id": "climate.klima", "state": "on", "mode": "heat"}}, {{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Dışarısı soğuk ({temp}°C), içeriyi ısıtmak için klimayı açtım ve perdeleri kapattım."}}
+            Çıktı: {{"actions": [{{"entity_id": "climate.isitici", "state": "on", "temperature": 22}}, {{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Dışarı {temp}°C ve soğuk, ısıtıcıyı açtım ve perdeyi kapattım {st.session_state.user_name}. Sıcacık ol!"}}
 
-            Kullanıcı: "Çalışma modu aktifse 25 dakika sonra mola hatırlat"
-            Çıktı: {{"timers": [{{"entity_id": "none", "delay_seconds": 1500, "reminder": "Mola zamanı geldi!"}}], "response": "Tamam, 25 dakika sonra mola vermen için seni uyaracağım."}}
+            Kullanıcı: "Eğer güç tüketimi yüksekse enerji tasarrufu modu aktif et"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.guc_tuketimi"}}], "actions": [{{"entity_id": "scene.enerji_tasarrufu"}}], "response": "Güç tüketimini kontrol ediyorum... Yüksekse tasarruf moduna geçeceğim {st.session_state.user_name}."}}
 
-            Kullanıcı: "Eğer nem yüksekse fanı aç"
-            Çıktı: {{"actions": [{{"entity_id": "fan.fan_salon", "state": "on"}}], "response": "Nem oranını dengelemek için fanı çalıştırdım."}}
+            Kullanıcı: "Eğer yatak odası ışığı açıksa ve saat gece 11'i geçtiyse kapat"
+            Çıktı: {{"queries": [{{"entity_id": "light.yatak_odasi_isigi"}}], "actions": [{{"entity_id": "light.yatak_odasi_isigi", "state": "off"}}], "response": "Yatak odası ışığını ve saati kontrol ediyorum... Gece geç olduysa kapatacağım {st.session_state.user_name}. İyi uykular!"}}
 
-            Kullanıcı: "Film gecesi modu ve 2 saat sonra ışıkları kapat"
-            Çıktı: {{"actions": [{{"entity_id": "scene.film_gecesi"}}], "timers": [{{"entity_id": "light.salon_isigi", "delay_seconds": 7200, "state": "off"}}], "response": "Film gecesi başladı! 2 saat sonra ışıkları da kapatacağım, iyi seyirler."}}
+            Kullanıcı: "Eğer hava kalitesi kötüyse havalandırmayı aç ve pencereyi aç"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.hava_kalitesi"}}], "actions": [{{"entity_id": "climate.havalandirma", "state": "on"}}, {{"entity_id": "cover.perde_salon", "state": "open"}}], "response": "Hava kalitesini kontrol ediyorum... Kötüyse havalandırma ve pencere açacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer mutfak ışığı kapalıysa ve hareket varsa aç"
+            Çıktı: {{"queries": [{{"entity_id": "light.mutfak_isigi"}}, {{"entity_id": "binary_sensor.hareket_salon"}}], "actions": [{{"entity_id": "light.mutfak_isigi", "state": "on"}}], "response": "Mutfak ışığını ve hareketi kontrol ediyorum... Gerekirse açacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer dışarı yağmurluysa perdeyi kapat ve ışıkları aç"
+            Çıktı: {{"actions": [{{"entity_id": "cover.perde_salon", "state": "off"}}, {{"entity_id": "light.salon_isigi", "state": "on", "brightness_pct": 80}}], "response": "Hava {desc}, yağmurlu – perdeyi kapattım ve ışıkları açtım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer nem yüksekse fanı aç ve klimayı nem alma moduna al"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.nem_genel"}}], "actions": [{{"entity_id": "fan.fan_salon", "state": "on"}}, {{"entity_id": "climate.klima", "state": "on", "mode": "dry"}}], "response": "Nem seviyesini kontrol ediyorum... Yüksekse fan ve klima nem alma moduna geçecek {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer çalışma modu aktifse ve 25 dakika geçtiyse mola hatırlat"
+            Çıktı: {{"queries": [{{"entity_id": "scene.calisma_modu"}}], "timers": [{{"entity_id": "none", "delay_seconds": 1500, "reminder": "Mola zamanı {st.session_state.user_name}! Gözlerini dinlendir."}}], "response": "Çalışma modunu kontrol ediyorum... 25 dakika sonra mola hatırlatacağım."}}
+
+            Kullanıcı: "Eğer TV açıksa ve saat gece 12'yi geçtiyse kapat"
+            Çıktı: {{"queries": [{{"entity_id": "media_player.tv_salon"}}], "actions": [{{"entity_id": "media_player.tv_salon", "state": "off"}}], "response": "TV'yi ve saati kontrol ediyorum... Gece geç olduysa kapatacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer kahve makinesi çalışıyorsa ve 5 dakika geçtiyse 'kahven hazır' diye hatırlat"
+            Çıktı: {{"queries": [{{"entity_id": "switch.kahve_makinesi"}}], "timers": [{{"entity_id": "none", "delay_seconds": 300, "reminder": "Kahven hazır {st.session_state.user_name}! ☕"}}], "response": "Kahve makinesini kontrol ediyorum... Çalışıyorsa 5 dakika sonra hatırlatacağım."}}
+
+            Kullanıcı: "Eğer dışarı sıcaksa ve nem yüksekse klimayı aç, yoksa fanı aç"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.sicaklik_dis"}}, {{"entity_id": "sensor.nem_genel"}}], "actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}}], "response": "Dış sıcaklık ve nemi kontrol ediyorum... Buna göre klimayı açtım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer robot süpürge çalışıyorsa ve 1 saat geçtiyse durdur"
+            Çıktı: {{"queries": [{{"entity_id": "switch.robot_supurge"}}], "timers": [{{"entity_id": "switch.robot_supurge", "delay_seconds": 3600, "state": "off"}}], "response": "Robot süpürgeyi kontrol ediyorum... Çalışıyorsa 1 saat sonra durduracağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer ışık seviyesi düşükse salon ışığını aç"
+            Çıktı: {{"queries": [{{"entity_id": "sensor.isik_seviyesi_salon"}}], "actions": [{{"entity_id": "light.salon_isigi", "state": "on", "brightness_pct": 70}}], "response": "Salon ışık seviyesini kontrol ediyorum... Düşükse ışığı açacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer müzik çalıyorsa ve ses yüksekse yarıya düşür"
+            Çıktı: {{"queries": [{{"entity_id": "media_player.muzik_sistemi"}}], "actions": [{{"entity_id": "media_player.muzik_sistemi", "volume_level": 0.5}}], "response": "Müzik sistemini kontrol ediyorum... Ses yüksekse yarıya düşüreceğim {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer klima açıksa ve sıcaklık 22'ye ulaştıysa kapat"
+            Çıktı: {{"queries": [{{"entity_id": "climate.klima"}}, {{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "climate.klima", "state": "off"}}], "response": "Klima ve sıcaklığı kontrol ediyorum... 22°C'ye ulaştıysa kapatacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer perde açıksa ve güneş batıyorsa kapat"
+            Çıktı: {{"queries": [{{"entity_id": "cover.perde_salon"}}], "actions": [{{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Perdeyi ve gün batımını kontrol ediyorum... Güneş battıysa kapatacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer kahve makinesi kapalıysa ve sabah 7'yi geçtiyse aç"
+            Çıktı: {{"queries": [{{"entity_id": "switch.kahve_makinesi"}}], "actions": [{{"entity_id": "switch.kahve_makinesi", "state": "on"}}], "response": "Kahve makinesini ve saati kontrol ediyorum... Sabah geçtiyse açacağım {st.session_state.user_name}."}}
+
+            Kullanıcı: "Eğer fan açıksa ve sıcaklık düştüyse kapat"
+            Çıktı: {{"queries": [{{"entity_id": "fan.fan_salon"}}, {{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "fan.fan_salon", "state": "off"}}], "response": "Fanı ve sıcaklığı kontrol ediyorum... Düştüyse kapatacağım {st.session_state.user_name}."}}
 
             SON TALİMATLAR (KRİTİK):
             - Düşünme sürecini ASLA çıktıya yazma.
             - YALNIZCA geçerli JSON ver.
-            - "or" mantığı kullanma, kesin karar ver ve uygula.
+            - "OR" mantığı kullanma (Python'da yok). Tek bir eylem listesi ver.
             - JSON Yapısı:
             {{
               "actions": [{{"entity_id": "xxx", "state": "on/off", "brightness_pct": 50, ...}}],
