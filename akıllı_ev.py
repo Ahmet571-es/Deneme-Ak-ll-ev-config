@@ -18,41 +18,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. ÖZEL TASARIM (CSS) ---
+# --- 2. TASARIM (CSS) ---
 st.markdown("""
 <style>
-    /* Ana başlık stili */
-    h1 {
-        color: #FF4B4B;
-        font-family: 'Helvetica Neue', sans-serif;
-        text-align: center;
-    }
-    /* Metrik kutuları */
-    div[data-testid="stMetric"] {
-        background-color: #262730;
-        border: 1px solid #464b5f;
-        padding: 15px;
-        border-radius: 10px;
-        color: white;
-    }
-    /* Butonlar */
-    div.stButton > button {
-        width: 100%;
-        border-radius: 10px;
-        height: 50px;
-        font-weight: bold;
-    }
-    /* Sohbet baloncukları */
-    .stChatMessage {
-        border-radius: 15px;
-        padding: 10px;
-    }
-    /* Expander Başlığı */
-    .streamlit-expanderHeader {
-        font-size: 18px;
-        font-weight: bold;
-        color: #FF4B4B;
-    }
+    h1 { color: #FF4B4B; font-family: 'Helvetica Neue', sans-serif; text-align: center; }
+    div[data-testid="stMetric"] { background-color: #262730; border: 1px solid #464b5f; padding: 15px; border-radius: 10px; color: white; }
+    div.stButton > button { width: 100%; border-radius: 10px; height: 50px; font-weight: bold; }
+    .stChatMessage { border-radius: 15px; padding: 10px; }
+    .streamlit-expanderHeader { font-size: 16px; font-weight: bold; color: #FF4B4B; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -69,26 +42,43 @@ if not GROK_API_KEY:
 
 client = openai.OpenAI(api_key=GROK_API_KEY, base_url="https://api.x.ai/v1")
 
-# --- ENTITY TANIMLARI ---
+# --- ENTITY TANIMLARI (VE GÖRÜNÜR İSİMLER) ---
 ENTITY_NAMES = {
-    "light.salon_isigi": "Salon Işığı",
-    "light.yatak_odasi_isigi": "Yatak Odası Işığı",
-    "light.mutfak_isigi": "Mutfak Işığı",
-    "climate.klima": "Klima",
-    "fan.fan_salon": "Salon Fanı",
-    "cover.perde_salon": "Salon Perdesi",
-    "media_player.tv_salon": "Salon TV",
-    "media_player.muzik_sistemi": "Müzik Sistemi",
-    "switch.kahve_makinesi": "Kahve Makinesi",
-    "switch.cay_makinesi": "Çay Makinesi",
-    "switch.robot_supurge": "Robot Süpürge",
-    "scene.sabah_rutini": "Sabah Rutini",
-    "scene.aksam_rahatlama": "Akşam Rahatlama",
-    "scene.film_gecesi": "Film Gecesi",
-    "scene.misafir_modu": "Misafir Modu",
-    "scene.calisma_modu": "Çalışma Modu",
-    "scene.enerji_tasarrufu": "Enerji Tasarrufu"
+    "light.salon_isigi": "🛋️ Salon Işığı",
+    "light.yatak_odasi_isigi": "🛏️ Yatak Odası Işığı",
+    "light.mutfak_isigi": "🍳 Mutfak Işığı",
+    "climate.klima": "❄️/🔥 Klima",
+    "fan.fan_salon": "🌀 Salon Fanı",
+    "cover.perde_salon": "🪟 Salon Perdesi",
+    "media_player.tv_salon": "📺 Salon TV",
+    "media_player.muzik_sistemi": "🎵 Müzik Sistemi",
+    "switch.kahve_makinesi": "☕ Kahve Makinesi",
+    "switch.cay_makinesi": "🍵 Çay Makinesi",
+    "switch.robot_supurge": "🧹 Robot Süpürge",
+    "scene.sabah_rutini": "🌅 Sabah Rutini",
+    "scene.aksam_rahatlama": "🌙 Akşam Rahatlama",
+    "scene.film_gecesi": "🎬 Film Gecesi",
+    "scene.misafir_modu": "👨‍👩‍👧‍👦 Misafir Modu",
+    "scene.calisma_modu": "💻 Çalışma Modu",
+    "scene.enerji_tasarrufu": "🔋 Enerji Tasarrufu"
 }
+
+# --- HAZIR KOMUT LİSTESİ (DROPDOWN İÇİN) ---
+PRESET_COMMANDS = [
+    "Seçiniz... (Veya aşağıya kendiniz yazın)",
+    "Salon ışığını aç",
+    "Salon ışığını kapat",
+    "Tüm ışıkları kapat",
+    "Klimayı 22 dereceye ayarla",
+    "Klimayı kapat",
+    "Film modunu başlat (Işıklar kısılır, TV açılır)",
+    "Sabah rutinini başlat (Perde açılır, Kahve başlar)",
+    "Robot süpürgeyi çalıştır",
+    "Eve misafir geldi, misafir modunu aç",
+    "Yatak odası ışığını %10 yap",
+    "30 dakika sonra salon ışığını kapat",
+    "Hava durumuna göre evin sıcaklığını ayarla"
+]
 
 # --- FONKSİYONLAR ---
 def get_real_temperature():
@@ -153,46 +143,28 @@ def process_timer(entity_id, delay, action):
     res = send_to_ha({"entity_id": entity_id, **action})
     print(f"Zamanlayıcı Bitti: {res}")
 
-# --- UYGULAMA AKIŞ KONTROLÜ ---
-if "page" not in st.session_state:
-    st.session_state.page = "welcome"
-if "user_name" not in st.session_state:
-    st.session_state.user_name = ""
+# --- AKIŞ KONTROLÜ ---
+if "page" not in st.session_state: st.session_state.page = "welcome"
+if "user_name" not in st.session_state: st.session_state.user_name = ""
 
-# --- SAYFA 1: KARŞILAMA VE BİLGİ ---
+# --- SAYFA 1: KARŞILAMA ---
 if st.session_state.page == "welcome":
     st.title("🏠 ÇETİN AI Ev Asistanı")
     st.markdown("---")
-    
-    # Detaylı Bilgi Butonu (Expander)
     with st.expander("ℹ️ Bu Uygulama Nedir ve Nasıl Kullanılır? (Okumak için Tıklayın)", expanded=False):
         st.markdown("""
         ### 📱 Uygulama Ne İşe Yarar?
-        ÇETİN AI, klasik akıllı ev sistemlerinin aksine, sizinle **konuşarak anlaşan** ve **düşünebilen** yeni nesil bir ev asistanıdır. Sadece düğmelere basmak yerine, ona derdinizi anlatırsınız, o da ne yapması gerektiğine karar verir.
-
-        ### 🎯 Uygulamanın Amacı Nedir?
-        Bu projenin temel amacı, karmaşık ev otomasyon sistemlerini herkesin (çocuklardan yaşlılara kadar) kullanabileceği kadar **basit ve doğal** hale getirmektir. Yapay zeka gücüyle, evinizdeki cihazları yönetmek için mühendis olmanıza gerek kalmaz.
-
-        ### 🛠️ Uygulama İle Neler Yapabilirsiniz?
-        Bu asistan ile evinizdeki şu cihazları yönetebilirsiniz:
-        * **Aydınlatma:** Işıkları açabilir, kapatabilir veya parlaklığını ayarlayabilirsiniz.
-        * **İklimlendirme:** Kombiyi veya klimayı ortam sıcaklığına göre kontrol edebilirsiniz.
-        * **Güvenlik ve Konfor:** Perdeleri açıp kapatabilir, kapı kilitlerini kontrol edebilirsiniz.
-        * **Ev Aletleri:** Robot süpürgeyi çalıştırabilir, kahve makinesini açabilirsiniz.
-        * **Senaryolar:** "Film Modu", "Sabah Rutini" gibi tek komutla evi baştan aşağı değiştiren modları kullanabilirsiniz.
-
-        ### 🚀 Uygulama Nasıl Kullanılır? (Adım Adım)
-        1.  **Başlatın:** Aşağıdaki 'Uygulamayı Başlatın' butonuna basın.
-        2.  **Tanışın:** Adınızı girin ki asistan size isminizle hitap edebilsin.
+        ÇETİN AI, klasik akıllı ev sistemlerinin aksine, sizinle **konuşarak anlaşan** ve **düşünebilen** yeni nesil bir ev asistanıdır.
+        
+        ### 🚀 Nasıl Kullanılır?
+        1.  **Başlatın:** Aşağıdaki butona basın.
+        2.  **Tanışın:** Adınızı girin.
         3.  **Emir Verin:**
-            * **Sesli:** Mikrofon butonuna basıp "Işıkları yak" diyebilirsiniz.
-            * **Yazılı:** Sohbet kutusuna "Hava soğuksa kombiyi aç" yazabilirsiniz.
-        4.  **Sonucu Görün:** Asistanın işlemi yaptığını ekranda anlık olarak göreceksiniz.
+            * **Seçerek:** Hazır listeden komut seçebilirsiniz.
+            * **Konuşarak:** Mikrofonla konuşabilirsiniz.
+            * **Yazarak:** İstediğinizi yazabilirsiniz.
         """)
-    
-    st.write("") # Boşluk
     st.write("")
-    
     col_center = st.columns([1, 2, 1])
     with col_center[1]:
         if st.button("Uygulamayı Başlatın 🚀"):
@@ -203,206 +175,141 @@ if st.session_state.page == "welcome":
 elif st.session_state.page == "name_input":
     st.title("👋 Hoş Geldiniz")
     st.markdown("---")
-    
     with st.form("user_name_form"):
         st.subheader("Size nasıl hitap etmemi istersiniz?")
-        # value="" diyerek her seferinde boş gelmesini sağlıyoruz
         name_input = st.text_input("Adınız:", value="", placeholder="Örn: Ahmet Bey")
-        
-        submitted = st.form_submit_button("Sisteme Giriş Yap ✅")
-        if submitted and name_input.strip():
+        if st.form_submit_button("Sisteme Giriş Yap ✅") and name_input.strip():
             st.session_state.user_name = name_input.strip().split()[0]
             st.session_state.page = "main_app"
             st.rerun()
-        elif submitted:
-            st.warning("Lütfen geçerli bir isim giriniz.")
 
-# --- SAYFA 3: ANA UYGULAMA (DASHBOARD) ---
+# --- SAYFA 3: ANA UYGULAMA ---
 elif st.session_state.page == "main_app":
-    # --- YAN PANEL (SIDEBAR) ---
+    # Sidebar (Cihaz Listesi ve Mikrofon)
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/4712/4712035.png", width=80)
         st.title("ÇETİN AI Panel")
-        st.markdown("---")
         
+        # CİHAZ LİSTESİ (YENİ EKLENDİ)
+        with st.expander("📋 Yönetebildiğim Cihazlar", expanded=True):
+            st.markdown("""
+            **Aydınlatma:**
+            * Salon, Yatak Odası, Mutfak Işıkları
+            
+            **İklim:**
+            * Klima, Fan
+            
+            **Diğer:**
+            * TV, Müzik Sistemi, Perde
+            * Kahve & Çay Makinesi, Robot Süpürge
+            
+            **Modlar:**
+            * Film, Sabah, Misafir, Çalışma
+            """)
+
+        st.markdown("---")
         st.write("🎙️ **Sesli Komut**")
         audio = mic_recorder(start_prompt="🔴 Kaydı Başlat", stop_prompt="⏹ Bitir", key="recorder")
-        
         decoded_text = None
         if audio:
-            with st.spinner("Sesiniz yazıya çevriliyor..."):
+            with st.spinner("Sesiniz işleniyor..."):
                 decoded_text = transcribe_audio_free(audio["bytes"])
-            if decoded_text:
-                st.success(f"Algılanan: '{decoded_text}'")
-            else:
-                st.warning("Ses anlaşılamadı.")
-        
+            if decoded_text: st.success(f"Algılanan: '{decoded_text}'")
+            else: st.warning("Ses anlaşılamadı.")
         st.markdown("---")
-        st.info("💡 **İpucu:** 'Hava durumu nasıl?' veya 'Misafir modu başlat' diyebilirsiniz.")
-        
-        st.markdown("---")
-        # ÇIKIŞ BUTONU
         if st.button("🚪 Uygulamadan Ayrıl"):
             st.session_state.page = "welcome"
             st.session_state.user_name = ""
-            st.session_state.messages = [] # Geçmişi temizle
+            st.session_state.messages = []
             st.rerun()
 
-    # --- ANA EKRAN İÇERİĞİ ---
+    # Dashboard
     st.title(f"🏠 ÇETİN AI Ev Asistanı | {st.session_state.user_name}")
-    
-    # Hava Durumu Kartları
     col1, col2, col3, col4 = st.columns(4)
     temp, desc, hum, wind = get_real_temperature()
-
-    with col1:
-        st.metric(label="📍 Konum", value="Ankara")
-    with col2:
-        st.metric(label="🌡️ Sıcaklık", value=f"{temp} °C", delta=desc)
-    with col3:
-        st.metric(label="💧 Nem", value=f"%{hum}")
-    with col4:
-        st.metric(label="💨 Rüzgar", value=f"{wind} km/s")
-
+    with col1: st.metric("📍 Konum", "Ankara")
+    with col2: st.metric("🌡️ Sıcaklık", f"{temp} °C", delta=desc)
+    with col3: st.metric("💧 Nem", f"%{hum}")
+    with col4: st.metric("💨 Rüzgar", f"{wind} km/s")
     st.divider()
 
-    # Sohbet Geçmişi Başlatma
+    # Sohbet
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {st.session_state.user_name}! Evin kontrolü bende. Nasıl yardımcı olabilirim?"}]
-
-    # Mesajları Ekrana Yazdır
+        st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {st.session_state.user_name}! Cihaz listesi yanda, hazır komutlar aşağıda. Nasıl yardımcı olabilirim?"}]
+    
     for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            with st.chat_message("user", avatar="👤"):
-                st.markdown(msg["content"])
-        else:
-            with st.chat_message("assistant", avatar="🧠"):
-                st.markdown(msg["content"])
+        with st.chat_message(msg["role"], avatar="👤" if msg["role"]=="user" else "🧠"):
+            st.markdown(msg["content"])
 
-    # Komut Girişi (Ses veya Yazı)
-    prompt = None
+    # KOMUT GİRİŞ ALANI (GÜNCELLENDİ)
+    
+    # 1. Hazır Listeden Seçim
+    st.markdown("### 👇 Ne yapmak istersiniz?")
+    selected_command = st.selectbox("Hazır Komut Menüsü:", PRESET_COMMANDS, label_visibility="collapsed")
+    
+    col_submit_1, col_submit_2 = st.columns([1, 4])
+    apply_btn = col_submit_1.button("Bunu Uygula ▶️")
+    
+    # Komut Belirleme (Öncelik: Ses > Liste Butonu > Yazı)
+    final_prompt = None
+
     if decoded_text:
-        prompt = decoded_text
-    elif chat_input := st.chat_input("Bir komut yazın (Örn: Işıkları kapat)..."):
-        prompt = chat_input
+        final_prompt = decoded_text
+    elif apply_btn and selected_command != "Seçiniz... (Veya aşağıya kendiniz yazın)":
+        final_prompt = selected_command
+    elif chat_input := st.chat_input("Veya buraya kendi cümlenizi yazın..."):
+        final_prompt = chat_input
 
     # --- GROK MANTIK ---
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(prompt)
+    if final_prompt:
+        st.session_state.messages.append({"role": "user", "content": final_prompt})
+        with st.chat_message("user", avatar="👤"): st.markdown(final_prompt)
 
         with st.chat_message("assistant", avatar="🧠"):
             placeholder = st.empty()
             placeholder.markdown("⏳ *ÇETİN AI düşünüyor...*")
 
-            # --- SYSTEM PROMPT (DOKUNULMADI) ---
             system_prompt = f"""
-Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et, mantık yürüt. Kullanıcının adı {st.session_state.user_name}.
-Şu an Ankara'da hava {temp}°C ve {desc}. Bu bilgiyi koşullar için akıllıca kullan.
+            Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et, mantık yürüt. Kullanıcının adı {st.session_state.user_name}.
+            Şu an Ankara'da hava {temp}°C ve {desc}. Bu bilgiyi koşullar için akıllıca kullan.
 
-Önce komutu adım adım içsel olarak analiz et:
-1. Kullanıcının ana niyetini ve bağlamını belirle.
-2. Hangi entity'ler etkilenecek?
-3. Ek parametreler var mı? (parlaklık, renk, sıcaklık, transition saniye).
-4. Zamanlayıcı, tekrarlayan eylem veya sahne var mı?
-5. Koşullu mantık var mı? (Eğer... ise... – sensör sorgula, hava durumu, saat, kullanıcı konumu kullan).
-6. Hava durumu, saat veya kullanıcı alışkanlığına göre proaktif öneri yap.
-7. Güvenlik: Çakışan komutları önle, gereksiz enerji tüketimini azalt.
+            Kontrole açık entity'ler (konfor odaklı):
+            - light.salon_isigi, light.yatak_odasi_isigi, light.mutfak_isigi
+            - climate.klima, fan.fan_salon, cover.perde_salon
+            - media_player.tv_salon, media_player.muzik_sistemi
+            - switch.kahve_makinesi, switch.cay_makinesi, switch.robot_supurge
+            - scene.sabah_rutini, scene.aksam_rahatlama, scene.film_gecesi, scene.misafir_modu, scene.calisma_modu, scene.enerji_tasarrufu
 
-Kontrole açık entity'ler (konfor odaklı):
-- light.salon_isigi → Salon ışığı (aç/kapat, parlaklık %, RGB renk, transition saniye)
-- light.yatak_odasi_isigi → Yatak odası ışığı
-- light.mutfak_isigi → Mutfak ışığı
-- climate.klima → Klima (sıcaklık, mod)
-- fan.fan_salon → Salon fanı
-- cover.perde_salon → Salon perdesi
-- media_player.tv_salon → Salon TV
-- media_player.muzik_sistemi → Müzik sistemi
-- switch.kahve_makinesi → Kahve makinesi
-- switch.cay_makinesi → Çay makinesi
-- switch.robot_supurge → Robot süpürge
-- scene.sabah_rutini → Sabah rutini
-- scene.aksam_rahatlama → Akşam rahatlama
-- scene.film_gecesi → Film gecesi
-- scene.misafir_modu → Misafir modu
-- scene.calisma_modu → Çalışma modu
-- scene.enerji_tasarrufu → Enerji tasarrufu
+            Few-shot örnekler (KOŞULLU MANTIK DAHİL):
+            Kullanıcı: "Eğer salon sıcaksa klimayı aç"
+            Çıktı: {{"actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}}], "response": "Salonun sıcaklığını kontrol ettim, klimayı 22 dereceye ayarladım {st.session_state.user_name}."}}
 
-Few-shot örnekler (KOŞULLU KOMUTLAR ÇOK DAHA FAZLA VE DETAYLI EKLENDİ):
-Kullanıcı: "Eğer salon sıcaksa klimayı aç, yoksa fanı aç"
-Çıktı: {{"queries": [{{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}} or {{"entity_id": "fan.fan_salon", "state": "on"}}], "response": "Salon sıcaklığını kontrol ediyorum... Buna göre klima veya fan açacağım {st.session_state.user_name}!"}}
+            Kullanıcı: "Eğer hareket yoksa salon ışığını kapat"
+            Çıktı: {{"actions": [{{"entity_id": "light.salon_isigi", "state": "off"}}], "response": "Salonda hareket görmediğim için ışığı kapattım."}}
 
-Kullanıcı: "Eğer hareket yoksa salon ışığını kapat"
-Çıktı: {{"queries": [{{"entity_id": "binary_sensor.hareket_salon"}}], "actions": [{{"entity_id": "light.salon_isigi", "state": "off"}}], "response": "Salonda hareket olup olmadığını kontrol ediyorum... Yoksa ışığı kapatacağım {st.session_state.user_name}."}}
+            Kullanıcı: "Eğer dışarı soğuksa ısıtıcıyı aç ve perdeyi kapat"
+            Çıktı: {{"actions": [{{"entity_id": "climate.klima", "state": "on", "mode": "heat"}}, {{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Dışarısı soğuk ({temp}°C), içeriyi ısıtmak için klimayı açtım ve perdeleri kapattım."}}
 
-Kullanıcı: "Eğer dışarı soğuksa ısıtıcıyı aç ve perdeyi kapat"
-Çıktı: {{"actions": [{{"entity_id": "climate.isitici", "state": "on", "temperature": 22}}, {{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Dışarı {temp}°C ve soğuk, ısıtıcıyı açtım ve perdeyi kapattım {st.session_state.user_name}. Sıcacık ol!"}}
+            Kullanıcı: "Çalışma modu aktifse 25 dakika sonra mola hatırlat"
+            Çıktı: {{"timers": [{{"entity_id": "none", "delay_seconds": 1500, "reminder": "Mola zamanı geldi!"}}], "response": "Tamam, 25 dakika sonra mola vermen için seni uyaracağım."}}
 
-Kullanıcı: "Eğer güç tüketimi yüksekse enerji tasarrufu modu aktif et"
-Çıktı: {{"queries": [{{"entity_id": "sensor.guc_tuketimi"}}], "actions": [{{"entity_id": "scene.enerji_tasarrufu"}}], "response": "Güç tüketimini kontrol ediyorum... Yüksekse tasarruf moduna geçeceğim {st.session_state.user_name}."}}
+            Kullanıcı: "Eğer nem yüksekse fanı aç"
+            Çıktı: {{"actions": [{{"entity_id": "fan.fan_salon", "state": "on"}}], "response": "Nem oranını dengelemek için fanı çalıştırdım."}}
 
-Kullanıcı: "Eğer yatak odası ışığı açıksa ve saat gece 11'i geçtiyse kapat"
-Çıktı: {{"queries": [{{"entity_id": "light.yatak_odasi_isigi"}}], "actions": [{{"entity_id": "light.yatak_odasi_isigi", "state": "off"}}], "response": "Yatak odası ışığını ve saati kontrol ediyorum... Gece geç olduysa kapatacağım {st.session_state.user_name}. İyi uykular!"}}
+            Kullanıcı: "Film gecesi modu ve 2 saat sonra ışıkları kapat"
+            Çıktı: {{"actions": [{{"entity_id": "scene.film_gecesi"}}], "timers": [{{"entity_id": "light.salon_isigi", "delay_seconds": 7200, "state": "off"}}], "response": "Film gecesi başladı! 2 saat sonra ışıkları da kapatacağım, iyi seyirler."}}
 
-Kullanıcı: "Eğer hava kalitesi kötüyse havalandırmayı aç ve pencereyi aç"
-Çıktı: {{"queries": [{{"entity_id": "sensor.hava_kalitesi"}}], "actions": [{{"entity_id": "climate.havalandirma", "state": "on"}}, {{"entity_id": "cover.perde_salon", "state": "open"}}], "response": "Hava kalitesini kontrol ediyorum... Kötüyse havalandırma ve pencere açacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer mutfak ışığı kapalıysa ve hareket varsa aç"
-Çıktı: {{"queries": [{{"entity_id": "light.mutfak_isigi"}}, {{"entity_id": "binary_sensor.hareket_salon"}}], "actions": [{{"entity_id": "light.mutfak_isigi", "state": "on"}}], "response": "Mutfak ışığını ve hareketi kontrol ediyorum... Gerekirse açacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer dışarı yağmurluysa perdeyi kapat ve ışıkları aç"
-Çıktı: {{"actions": [{{"entity_id": "cover.perde_salon", "state": "off"}}, {{"entity_id": "light.salon_isigi", "state": "on", "brightness_pct": 80}}], "response": "Hava {desc}, yağmurlu – perdeyi kapattım ve ışıkları açtım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer nem yüksekse fanı aç ve klimayı nem alma moduna al"
-Çıktı: {{"queries": [{{"entity_id": "sensor.nem_genel"}}], "actions": [{{"entity_id": "fan.fan_salon", "state": "on"}}, {{"entity_id": "climate.klima", "state": "on", "mode": "dry"}}], "response": "Nem seviyesini kontrol ediyorum... Yüksekse fan ve klima nem alma moduna geçecek {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer çalışma modu aktifse ve 25 dakika geçtiyse mola hatırlat"
-Çıktı: {{"queries": [{{"entity_id": "scene.calisma_modu"}}], "timers": [{{"entity_id": "none", "delay_seconds": 1500, "reminder": "Mola zamanı {st.session_state.user_name}! Gözlerini dinlendir."}}], "response": "Çalışma modunu kontrol ediyorum... 25 dakika sonra mola hatırlatacağım."}}
-
-Kullanıcı: "Eğer TV açıksa ve saat gece 12'yi geçtiyse kapat"
-Çıktı: {{"queries": [{{"entity_id": "media_player.tv_salon"}}], "actions": [{{"entity_id": "media_player.tv_salon", "state": "off"}}], "response": "TV'yi ve saati kontrol ediyorum... Gece geç olduysa kapatacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer kahve makinesi çalışıyorsa ve 5 dakika geçtiyse 'kahven hazır' diye hatırlat"
-Çıktı: {{"queries": [{{"entity_id": "switch.kahve_makinesi"}}], "timers": [{{"entity_id": "none", "delay_seconds": 300, "reminder": "Kahven hazır {st.session_state.user_name}! ☕"}}], "response": "Kahve makinesini kontrol ediyorum... Çalışıyorsa 5 dakika sonra hatırlatacağım."}}
-
-Kullanıcı: "Eğer dışarı sıcaksa ve nem yüksekse klimayı aç, yoksa fanı aç"
-Çıktı: {{"queries": [{{"entity_id": "sensor.sicaklik_dis"}}, {{"entity_id": "sensor.nem_genel"}}], "actions": [{{"entity_id": "climate.klima", "state": "on", "temperature": 22}} or {{"entity_id": "fan.fan_salon", "state": "on"}}], "response": "Dış sıcaklık ve nemi kontrol ediyorum... Buna göre klima veya fan açacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer robot süpürge çalışıyorsa ve 1 saat geçtiyse durdur"
-Çıktı: {{"queries": [{{"entity_id": "switch.robot_supurge"}}], "timers": [{{"entity_id": "switch.robot_supurge", "delay_seconds": 3600, "state": "off"}}], "response": "Robot süpürgeyi kontrol ediyorum... Çalışıyorsa 1 saat sonra durduracağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer ışık seviyesi düşükse salon ışığını aç"
-Çıktı: {{"queries": [{{"entity_id": "sensor.isik_seviyesi_salon"}}], "actions": [{{"entity_id": "light.salon_isigi", "state": "on", "brightness_pct": 70}}], "response": "Salon ışık seviyesini kontrol ediyorum... Düşükse ışığı açacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer müzik çalıyorsa ve ses yüksekse yarıya düşür"
-Çıktı: {{"queries": [{{"entity_id": "media_player.muzik_sistemi"}}], "actions": [{{"entity_id": "media_player.muzik_sistemi", "volume_level": 0.5}}], "response": "Müzik sistemini kontrol ediyorum... Ses yüksekse yarıya düşüreceğim {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer klima açıksa ve sıcaklık 22'ye ulaştıysa kapat"
-Çıktı: {{"queries": [{{"entity_id": "climate.klima"}}, {{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "climate.klima", "state": "off"}}], "response": "Klima ve sıcaklığı kontrol ediyorum... 22°C'ye ulaştıysa kapatacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer perde açıksa ve güneş batıyorsa kapat"
-Çıktı: {{"queries": [{{"entity_id": "cover.perde_salon"}}], "actions": [{{"entity_id": "cover.perde_salon", "state": "off"}}], "response": "Perdeyi ve gün batımını kontrol ediyorum... Güneş battıysa kapatacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer kahve makinesi kapalıysa ve sabah 7'yi geçtiyse aç"
-Çıktı: {{"queries": [{{"entity_id": "switch.kahve_makinesi"}}], "actions": [{{"entity_id": "switch.kahve_makinesi", "state": "on"}}], "response": "Kahve makinesini ve saati kontrol ediyorum... Sabah geçtiyse açacağım {st.session_state.user_name}."}}
-
-Kullanıcı: "Eğer fan açıksa ve sıcaklık düştüyse kapat"
-Çıktı: {{"queries": [{{"entity_id": "fan.fan_salon"}}, {{"entity_id": "sensor.sicaklik_salon"}}], "actions": [{{"entity_id": "fan.fan_salon", "state": "off"}}], "response": "Fanı ve sıcaklığı kontrol ediyorum... Düştüyse kapatacağım {st.session_state.user_name}."}}
-
-SON TALİMATLAR (KRİTİK):
-- Düşünme sürecini ASLA çıktıya yazma.
-- YALNIZCA geçerli JSON ver (başka hiçbir şey yok).
-- JSON yapısı TAM OLARAK:
-{{
-  "actions": [{{"entity_id": "xxx", "state": "on/off", "brightness_pct": sayı, "rgb_color": [r,g,b], "temperature": sayı, "transition": saniye, ...}}, ...],
-  "timers": [{{"entity_id": "xxx", "delay_seconds": sayı, "state": "on/off", "repeat": "daily/weekly/hourly/interval", "duration": saniye, "reminder": "metin", "count": sayı, "weekdays_only": true/false, ...}}, ...],
-  "response": "Kullanıcıya samimi, kısa ve Türkçe mesaj"
-}}
-- actions ve timers boş liste olabilir ama anahtarlar olsun.
-- Anlaşılmazsa: {{"response": "Üzgünüm {st.session_state.user_name}, tam anlayamadım. Daha açık söyleyebilir misin?"}}
-- JSON geçersiz olursa içsel düzelt ve yeniden üret.
-"""
+            SON TALİMATLAR (KRİTİK):
+            - Düşünme sürecini ASLA çıktıya yazma.
+            - YALNIZCA geçerli JSON ver.
+            - "or" mantığı kullanma, kesin karar ver ve uygula.
+            - JSON Yapısı:
+            {{
+              "actions": [{{"entity_id": "xxx", "state": "on/off", "brightness_pct": 50, ...}}],
+              "timers": [{{"entity_id": "xxx", "delay_seconds": 60, "state": "off", "reminder": "text"}}],
+              "response": "Kullanıcıya samimi mesaj"
+            }}
+            """
 
             messages_api = [{"role": "system", "content": system_prompt}]
             for m in st.session_state.messages[-10:]:
@@ -416,41 +323,36 @@ SON TALİMATLAR (KRİTİK):
                     max_tokens=1000
                 )
                 grok_content = response.choices[0].message.content.strip()
+                if "```json" in grok_content: grok_content = grok_content.replace("```json", "").replace("```", "").strip()
                 
-                if "```json" in grok_content:
-                    grok_content = grok_content.replace("```json", "").replace("```", "").strip()
+                data = json.loads(grok_content)
+                bot_reply = data.get("response", "İşlem yapıldı.")
+                action_logs = []
                 
-                try:
-                    data = json.loads(grok_content)
-                    bot_reply = data.get("response", "İşlem yapıldı.")
-                    
-                    action_logs = []
-                    if "actions" in data:
-                        for action in data["actions"]:
-                            res = send_to_ha(action)
-                            action_logs.append(res)
-                    
-                    if "timers" in data:
-                        for timer in data["timers"]:
-                            delay = timer.get("delay_seconds", 0)
-                            if isinstance(delay, str): delay = 5 
-                            entity = timer.get("entity_id")
-                            act = {k:v for k,v in timer.items() if k not in ['delay_seconds', 'entity_id', 'repeat', 'duration']}
-                            threading.Thread(target=process_timer, args=(entity, delay, act)).start()
-                            tekrar = f" (Tekrar: {timer.get('repeat')})" if "repeat" in timer else ""
-                            action_logs.append(f"⏰ **Zamanlayıcı:** {ENTITY_NAMES.get(entity, entity)} ({delay}sn) {tekrar}")
+                if "actions" in data:
+                    for action in data["actions"]:
+                        res = send_to_ha(action)
+                        action_logs.append(res)
+                
+                if "timers" in data:
+                    for timer in data["timers"]:
+                        delay = timer.get("delay_seconds", 5)
+                        if isinstance(delay, str): delay = 5
+                        entity = timer.get("entity_id")
+                        act = {k:v for k,v in timer.items() if k not in ['delay_seconds', 'entity_id', 'reminder']}
+                        threading.Thread(target=process_timer, args=(entity, delay, act)).start()
+                        msg_tmr = f"⏰ **Zamanlayıcı:** {delay}sn"
+                        if "reminder" in timer: msg_tmr += f" (Not: {timer['reminder']})"
+                        action_logs.append(msg_tmr)
 
-                    final_html = f"**{bot_reply}**\n\n"
-                    if action_logs:
-                        final_html += "---\n" + "\n\n".join(action_logs)
-                    
-                    placeholder.markdown(final_html)
-                    st.session_state.messages.append({"role": "assistant", "content": final_html})
+                final_html = f"**{bot_reply}**\n\n"
+                if action_logs: final_html += "---\n" + "\n\n".join(action_logs)
+                
+                placeholder.markdown(final_html)
+                st.session_state.messages.append({"role": "assistant", "content": final_html})
 
-                except json.JSONDecodeError:
-                    placeholder.markdown(grok_content)
-                    st.session_state.messages.append({"role": "assistant", "content": grok_content})
-
+            except json.JSONDecodeError:
+                placeholder.markdown(grok_content)
+                st.session_state.messages.append({"role": "assistant", "content": grok_content})
             except Exception as e:
-                st.error(f"API Hatası: {e}")
-
+                st.error(f"Hata: {e}")
