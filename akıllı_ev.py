@@ -12,7 +12,7 @@ import io
 
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(
-    page_title="ÇETİN AI Ev Asistanı", 
+    page_title="ÇETİN AKILLI KONFOR ODAKLI EV ASİSTANI", 
     page_icon="🏠", 
     layout="wide", 
     initial_sidebar_state="expanded"
@@ -26,6 +26,16 @@ st.markdown("""
     div.stButton > button { width: 100%; border-radius: 10px; height: 50px; font-weight: bold; }
     .stChatMessage { border-radius: 15px; padding: 10px; }
     .streamlit-expanderHeader { font-size: 16px; font-weight: bold; color: #FF4B4B; }
+    .info-box {
+        background-color: #262730;
+        border-left: 5px solid #FF4B4B;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        text-align: center;
+        font-size: 14px;
+        color: #ddd;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,7 +73,7 @@ ENTITY_NAMES = {
     "scene.enerji_tasarrufu": "🔋 Enerji Tasarrufu"
 }
 
-# --- KATEGORİLİ KOMUT LİSTESİ (HEM SES HEM YAZI İÇİN REHBER) ---
+# --- KATEGORİLİ KOMUT LİSTESİ (REHBER VE DROPDOWN) ---
 COMMAND_CATEGORIES = {
     "💡 Aydınlatma": [
         "Salon ışığını aç",
@@ -177,8 +187,15 @@ if "user_name" not in st.session_state: st.session_state.user_name = ""
 
 # --- SAYFA 1: KARŞILAMA ---
 if st.session_state.page == "welcome":
-    st.title("🏠 ÇETİN AI Ev Asistanı")
-    st.markdown("---")
+    st.title("🏠 ÇETİN AKILLI KONFOR ODAKLI EV ASİSTANI")
+    st.markdown("""
+    <div class="info-box">
+        ⚠️ <strong>ÖNEMLİ BİLGİLENDİRME:</strong><br>
+        Bu asistan, güvenlik sistemlerini (alarm, kamera, kilit) yönetmez.<br>
+        Tamamen sizin konforunuzu, evinizin ambiyansını ve yaşam kalitenizi artırmak için tasarlanmıştır.
+    </div>
+    """, unsafe_allow_html=True)
+    
     with st.expander("ℹ️ Bu Uygulama Nedir ve Nasıl Kullanılır? (Okumak için Tıklayın)", expanded=False):
         st.markdown("""
         ### 📱 Uygulama Ne İşe Yarar?
@@ -246,7 +263,13 @@ elif st.session_state.page == "main_app":
             st.rerun()
 
     # --- DASHBOARD ---
-    st.title(f"🏠 ÇETİN AI Ev Asistanı | {st.session_state.user_name}")
+    st.title(f"🏠 ÇETİN AKILLI KONFOR ODAKLI EV ASİSTANI | {st.session_state.user_name}")
+    st.markdown("""
+    <div style="text-align: center; color: #888; font-size: 12px; margin-bottom: 10px;">
+        ⚠️ Bu sistem güvenlik odaklı değildir. Sadece konfor ve yaşam kalitesini artırmaya odaklanmıştır.
+    </div>
+    """, unsafe_allow_html=True)
+
     col1, col2, col3, col4 = st.columns(4)
     temp, desc, hum, wind = get_real_temperature()
     with col1: st.metric("📍 Konum", "Ankara")
@@ -257,7 +280,7 @@ elif st.session_state.page == "main_app":
 
     # --- SOHBET GEÇMİŞİ ---
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {st.session_state.user_name}! İster yandaki listeden bakıp konuş, ister aşağıdaki listeden seç. Emrindeyim."}]
+        st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {st.session_state.user_name}! İster yandaki listeden bakıp konuş, ister aşağıdaki listeden seç. Konforun için emrindeyim."}]
     
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"], avatar="👤" if msg["role"]=="user" else "🧠"):
@@ -296,7 +319,7 @@ elif st.session_state.page == "main_app":
             placeholder = st.empty()
             placeholder.markdown("⏳ *ÇETİN AI düşünüyor...*")
 
-            # --- SYSTEM PROMPT (ORİJİNAL - DOKUNULMADI) ---
+            # --- SYSTEM PROMPT (DOKUNULMADI) ---
             system_prompt = f"""
             Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et, mantık yürüt. Kullanıcının adı {st.session_state.user_name}.
             Şu an Ankara'da hava {temp}°C ve {desc}. Bu bilgiyi koşullar için akıllıca kullan.
