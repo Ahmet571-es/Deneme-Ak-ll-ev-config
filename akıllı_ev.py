@@ -34,6 +34,12 @@ st.markdown("""
         border-radius: 10px;
         color: white;
     }
+    /* Bilgi kutusu (Rehber) stili */
+    .streamlit-expanderHeader {
+        font-weight: bold;
+        color: #FF4B4B;
+        font-size: 18px;
+    }
     /* Sohbet baloncukları */
     .stChatMessage {
         border-radius: 15px;
@@ -50,10 +56,9 @@ HA_URL = os.getenv("HA_URL")
 HA_TOKEN = os.getenv("HA_TOKEN")
 
 if not GROK_API_KEY:
-    st.error("⚠️ GROK_API_KEY eksik! .env dosyasını kontrol et.")
+    st.error("⚠️ GROK_API_KEY eksik! Streamlit Secrets ayarlarını kontrol et.")
     st.stop()
 
-# Grok client
 client = openai.OpenAI(api_key=GROK_API_KEY, base_url="https://api.x.ai/v1")
 
 # --- ENTITY TANIMLARI ---
@@ -78,8 +83,6 @@ ENTITY_NAMES = {
 }
 
 # --- FONKSİYONLAR ---
-
-# 1. Gerçek Hava Durumu (Dashboard için Nem ve Rüzgar eklendi)
 def get_real_temperature():
     if OPENWEATHER_API_KEY:
         try:
@@ -88,14 +91,13 @@ def get_real_temperature():
             if response.get("main"):
                 temp = response['main']['temp']
                 desc = response['weather'][0]['description']
-                hum = response['main'].get('humidity', 50) # Nem
-                wind = response['wind'].get('speed', 10)   # Rüzgar
+                hum = response['main'].get('humidity', 50)
+                wind = response['wind'].get('speed', 10)
                 return temp, desc, hum, wind
         except:
             pass
     return 22.0, "parçalı bulutlu (simülasyon)", 45, 12
 
-# 2. ÜCRETSİZ Ses Tanıma
 def transcribe_audio_free(audio_bytes):
     r = sr.Recognizer()
     try:
@@ -107,14 +109,12 @@ def transcribe_audio_free(audio_bytes):
     except:
         return None 
 
-# 3. Home Assistant (Simülasyon veya Gerçek - Görsel İkonlar Eklendi)
 def send_to_ha(action):
     entity_id = action.get("entity_id")
     if not entity_id: return "Hata: Cihaz ID yok"
     
     device_name = ENTITY_NAMES.get(entity_id, entity_id)
 
-    # Gerçek HA varsa oraya gönder
     if HA_URL and HA_TOKEN:
         try:
             domain = entity_id.split('.')[0]
@@ -130,7 +130,6 @@ def send_to_ha(action):
         except Exception as e:
             return f"❌ HA Hatası: {str(e)}"
             
-    # SİMÜLASYON Cevabı
     state_str = "AÇILDI 🟢" if action.get("state") in ["on", "open"] else "KAPATILDI 🔴"
     if "scene" in entity_id: state_str = "AKTİF EDİLDİ 🎬"
     
@@ -146,14 +145,14 @@ def process_timer(entity_id, delay, action):
     res = send_to_ha({"entity_id": entity_id, **action})
     print(f"Zamanlayıcı Bitti: {res}")
 
-# Kullanıcı Adı Yönetimi (Şık Form)
+# Kullanıcı Adı Yönetimi
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
 if not st.session_state.user_name:
     with st.form("name_form"):
         st.subheader("👋 Hoş Geldiniz")
-        st.write("Sistemi başlatmak için adınızı girin.")
+        st.write("Sistemi başlatmak için lütfen adınızı girin.")
         name_input = st.text_input("Adınız")
         if st.form_submit_button("Sistemi Başlat 🚀") and name_input.strip():
             st.session_state.user_name = name_input.strip().split()[0]
@@ -161,8 +160,32 @@ if not st.session_state.user_name:
 else:
     user_name = st.session_state.user_name
 
-# --- ARAYÜZ YERLEŞİMİ (DASHBOARD) ---
-# Üst Kısım: Hava Durumu Kartları
+# --- ARAYÜZ VE REHBER ---
+
+# BAŞLIK
+st.title("🏠 Grok AI Ev Asistanı")
+
+# --- YENİ EKLENEN REHBER BÖLÜMÜ (BURASI YENİ!) ---
+with st.expander("ℹ️ BU UYGULAMA NEDİR & NASIL KULLANILIR? (Tıkla ve Oku)", expanded=True):
+    st.markdown("""
+    ### 👋 Merhaba! Ben Evinizin Yeni Beyniyim.
+    Bu uygulama, evinizdeki cihazları (ışık, klima, TV) **Yapay Zeka** ile yönetmenizi sağlar.
+    
+    #### ✨ Neler Yapabilirim?
+    1.  **🌡️ Havayı Takip Ederim:** Yukarıdaki kutularda Ankara'nın gerçek hava durumunu, nemini ve rüzgarını görebilirsiniz.
+    2.  **🧠 Düşünürüm:** "Dışarısı çok soğuk" derseniz, klimayı açmam gerektiğini akıl edebilirim.
+    3.  **🗣️ Sizi Duyarım:** İsterseniz yazışabilir, isterseniz konuşabilirsiniz.
+    4.  **⏱️ Zamanlarım:** "1 saat sonra ışığı kapat" derseniz, saati gelince kapatırım.
+
+    #### 🚀 Nasıl Kullanılır? (Adım Adım)
+    1.  **Sol Menüye Bak:** Orada bir **Mikrofon** butonu var. Ona basıp "Işığı aç" derseniz sesinizi dinlerim.
+    2.  **Aşağıya Yaz:** En alttaki kutucuğa "Film modu başlat" yazıp Enter'a basabilirsiniz.
+    3.  **Sonucu İzle:** Ben işlemi yapınca ekranda **"🛠️ SİMÜLASYON"** veya **"✅ GERÇEK"** diye yazarım.
+    
+    *Not: Şu an kart takılı olmadığı için 'Simülasyon Modu'ndayım. Yani ışığı gerçekten yakmam ama yaktığımı hayal ederim.* """)
+# ----------------------------------------------------
+
+# Hava Durumu Kartları
 col1, col2, col3, col4 = st.columns(4)
 temp, desc, hum, wind = get_real_temperature()
 
@@ -177,7 +200,7 @@ with col4:
 
 st.divider()
 
-# Yan Panel: Ses Kaydedici
+# Yan Panel
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/4712/4712035.png", width=80)
     st.title("Kontrol Paneli")
@@ -196,11 +219,11 @@ with st.sidebar:
             st.warning("Ses anlaşılamadı.")
     
     st.markdown("---")
-    st.info("💡 İpucu: 'Sabah modunu aç' veya '30dk sonra ışığı kapat' diyebilirsiniz.")
+    st.info("💡 **Örnek Komutlar:**\n- 'Salon ışığını %50 yap'\n- 'Hava soğuksa kombiyi aç'\n- 'Yarım saat sonra her şeyi kapat'")
 
 # Sohbet Geçmişi
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {user_name}! Evin kontrolü bende. Ne yapmak istersin?"}]
+    st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {user_name}! Emirlerini bekliyorum."}]
 
 for msg in st.session_state.messages:
     if msg["role"] == "user":
@@ -214,7 +237,7 @@ for msg in st.session_state.messages:
 prompt = None
 if decoded_text:
     prompt = decoded_text
-elif chat_input := st.chat_input("Komutunuzu yazın..."):
+elif chat_input := st.chat_input("Buraya bir komut yazın..."):
     prompt = chat_input
 
 # --- ANA MANTIK ---
@@ -227,7 +250,6 @@ if prompt:
         placeholder = st.empty()
         placeholder.markdown("⏳ *Grok düşünüyor...*")
 
-        # --- SYSTEM PROMPT (DOKUNULMADI - TAM OLARAK İSTEDİĞİN GİBİ) ---
         system_prompt = f"""
         Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et. Kullanıcının adı {user_name}.
         Şu an Ankara'da hava {temp}°C ve {desc}.
@@ -251,33 +273,18 @@ if prompt:
         - scene.calisma_modu → Çalışma modu
         - scene.enerji_tasarrufu → Enerji tasarrufu
 
-        Few-shot örnekler (İLERİ SEVİYE ZAMANLAYICI ÖRNEKLERİ ÇOK DAHA FAZLA EKLENDİ):
+        Few-shot örnekler:
         Kullanıcı: "Sabah rutini başlat"
         Çıktı: {{"actions": [{{"entity_id": "scene.sabah_rutini"}}], "response": "Günaydın {user_name}! Sabah rutini aktif."}}
 
         Kullanıcı: "30 dakika sonra salon ışığını kapat"
         Çıktı: {{"timers": [{{"entity_id": "light.salon_isigi", "delay_seconds": 1800, "state": "off"}}], "response": "Tamam {user_name}, 30 dakika sonra salon ışığını kapatacağım."}}
 
-        Kullanıcı: "Her sabah 7'de kahve hazırla ve ışıkları yavaş aç"
-        Çıktı: {{"timers": [{{"entity_id": "script.kahve_hazirla", "delay_seconds": "sabah7_hesapla", "repeat": "daily"}}, {{"entity_id": "light.salon_isigi", "state": "on", "transition": 300, "repeat": "daily"}}], "response": "Her sabah 7'de kahve ve ışık rutini ayarlandı {user_name}!"}}
-
         Kullanıcı: "Eğer dışarı sıcaksa 1 saat sonra fanı aç, soğuksa ısıtıcıyı aç"
         Çıktı: {{"timers": [{{"entity_id": "fan.fan_salon", "delay_seconds": 3600, "state": "on"}}], "response": "Hava durumuna göre 1 saat sonra fan açılacak {user_name}."}}
 
-        Kullanıcı: "Akşam 8'den sonra 2 saat boyunca her 30 dakikada bir hatırlatma yap: Su iç"
-        Çıktı: {{"timers": [{{"entity_id": "none", "delay_seconds": 1800, "repeat": "interval", "reminder": "Su içme zamanı {user_name}!"}}], "response": "Akşam 8'den itibaren her 30 dakikada su iç hatırlatması yapacağım."}}
-
         Kullanıcı: "Hafta sonu sabah 9'da robot süpürgeyi başlat ve müzik aç"
         Çıktı: {{"timers": [{{"entity_id": "switch.robot_supurge", "delay_seconds": "haftasonu9_hesapla", "repeat": "weekly"}}, {{"entity_id": "media_player.muzik_sistemi", "state": "on", "repeat": "weekly"}}], "response": "Hafta sonu sabah 9 rutin ayarlandı {user_name}."}}
-
-        Kullanıcı: "Film gecesi modu ve 2 saat sonra ışıkları otomatik kapat"
-        Çıktı: {{"actions": [{{"entity_id": "scene.film_gecesi"}}], "timers": [{{"entity_id": "light.salon_isigi", "delay_seconds": 7200, "state": "off"}}], "response": "Film gecesi aktif, 2 saat sonra ışıklar kapanacak {user_name}."}}
-
-        Kullanıcı: "Her akşam 10'da yatak odası ışığını loş yap ve klimayı 22 dereceye ayarla"
-        Çıktı: {{"timers": [{{"entity_id": "light.yatak_odasi_isigi", "state": "on", "brightness_pct": 30, "repeat": "daily"}}, {{"entity_id": "climate.klima", "temperature": 22, "repeat": "daily"}}], "response": "Her akşam 10 uyku rutini ayarlandı {user_name}, iyi geceler!"}}
-
-        Kullanıcı: "Eğer hava sıcaksa her saat başı fanı 10 dakika aç"
-        Çıktı: {{"timers": [{{"entity_id": "fan.fan_salon", "delay_seconds": 600, "state": "on", "repeat": "hourly", "duration": 600}}], "response": "Sıcak havalarda her saat fan 10 dakika çalışacak {user_name}."}}
 
         SON TALİMATLAR: YALNIZCA geçerli JSON ver. Yorum yapma.
         """
@@ -287,7 +294,6 @@ if prompt:
             messages_api.append({"role": m["role"], "content": m["content"]})
 
         try:
-            # Grok API Çağrısı (Model Korundu: grok-4-1-fast-reasoning)
             response = client.chat.completions.create(
                 model="grok-4-1-fast-reasoning", 
                 messages=messages_api, 
@@ -316,11 +322,9 @@ if prompt:
                         entity = timer.get("entity_id")
                         act = {k:v for k,v in timer.items() if k not in ['delay_seconds', 'entity_id', 'repeat', 'duration']}
                         threading.Thread(target=process_timer, args=(entity, delay, act)).start()
-                        
                         tekrar = f" (Tekrar: {timer.get('repeat')})" if "repeat" in timer else ""
                         action_logs.append(f"⏰ **Zamanlayıcı:** {ENTITY_NAMES.get(entity, entity)} ({delay}sn) {tekrar}")
 
-                # Final Gösterim (Daha Şık)
                 final_html = f"**{bot_reply}**\n\n"
                 if action_logs:
                     final_html += "---\n" + "\n\n".join(action_logs)
