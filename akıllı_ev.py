@@ -145,11 +145,12 @@ def process_timer(entity_id, delay, action):
     res = send_to_ha({"entity_id": entity_id, **action})
     print(f"Zamanlayıcı Bitti: {res}")
 
-# Kullanıcı Adı Yönetimi
+# --- KULLANICI ADI YÖNETİMİ (DÜZELTİLDİ) ---
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
 if not st.session_state.user_name:
+    st.title("🏠 Grok AI Ev Asistanı")
     with st.form("name_form"):
         st.subheader("👋 Hoş Geldiniz")
         st.write("Sistemi başlatmak için lütfen adınızı girin.")
@@ -157,6 +158,7 @@ if not st.session_state.user_name:
         if st.form_submit_button("Sistemi Başlat 🚀") and name_input.strip():
             st.session_state.user_name = name_input.strip().split()[0]
             st.rerun()
+    st.stop()  # <--- KRİTİK DÜZELTME BURADA (İsim yoksa dur!)
 else:
     user_name = st.session_state.user_name
 
@@ -165,7 +167,7 @@ else:
 # BAŞLIK
 st.title("🏠 Grok AI Ev Asistanı")
 
-# --- YENİ EKLENEN REHBER BÖLÜMÜ (BURASI YENİ!) ---
+# --- REHBER BÖLÜMÜ ---
 with st.expander("ℹ️ BU UYGULAMA NEDİR & NASIL KULLANILIR? (Tıkla ve Oku)", expanded=True):
     st.markdown("""
     ### 👋 Merhaba! Ben Evinizin Yeni Beyniyim.
