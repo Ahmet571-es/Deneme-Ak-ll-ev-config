@@ -4,17 +4,45 @@ import json
 import requests
 import time
 import threading
-import speech_recognition as sr  # Ücretsiz Google Ses Tanıma
+import speech_recognition as sr
 from dotenv import load_dotenv
 import os
-import random
 from streamlit_mic_recorder import mic_recorder
 import io
 
-# --- AYARLAR ---
-st.set_page_config(page_title="Grok Ev Asistanı", page_icon="🏠", layout="wide")
+# --- 1. SAYFA AYARLARI (GÖRÜNÜM) ---
+st.set_page_config(
+    page_title="Grok Ev Asistanı", 
+    page_icon="🧠", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
-# .env yükle
+# --- 2. ÖZEL CSS (PROFESYONEL TASARIM) ---
+st.markdown("""
+<style>
+    /* Ana başlık rengi */
+    h1 {
+        color: #FF4B4B;
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    /* Metrik kutularının arka planı */
+    div[data-testid="stMetric"] {
+        background-color: #262730;
+        border: 1px solid #464b5f;
+        padding: 15px;
+        border-radius: 10px;
+        color: white;
+    }
+    /* Sohbet baloncukları */
+    .stChatMessage {
+        border-radius: 15px;
+        padding: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- AYARLAR ---
 load_dotenv()
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
@@ -51,7 +79,7 @@ ENTITY_NAMES = {
 
 # --- FONKSİYONLAR ---
 
-# 1. Gerçek Hava Durumu
+# 1. Gerçek Hava Durumu (Dashboard için Nem ve Rüzgar eklendi)
 def get_real_temperature():
     if OPENWEATHER_API_KEY:
         try:
@@ -60,33 +88,26 @@ def get_real_temperature():
             if response.get("main"):
                 temp = response['main']['temp']
                 desc = response['weather'][0]['description']
-                return temp, desc
+                hum = response['main'].get('humidity', 50) # Nem
+                wind = response['wind'].get('speed', 10)   # Rüzgar
+                return temp, desc, hum, wind
         except:
             pass
-    return 22.0, "parçalı bulutlu (simülasyon)"
+    return 22.0, "parçalı bulutlu (simülasyon)", 45, 12
 
-# 2. ÜCRETSİZ Ses Tanıma (Google Speech Recognition)
+# 2. ÜCRETSİZ Ses Tanıma
 def transcribe_audio_free(audio_bytes):
     r = sr.Recognizer()
     try:
-        # Byte verisini SpeechRecognition'ın anlayacağı formatta okuyoruz
         audio_file = io.BytesIO(audio_bytes)
         with sr.AudioFile(audio_file) as source:
-            # Sesi işle
             audio_data = r.record(source)
-            # Google'a gönder (Ücretsiz API - Türkçe)
             text = r.recognize_google(audio_data, language="tr-TR")
             return text
-    except sr.UnknownValueError:
+    except:
         return None 
-    except sr.RequestError:
-        st.error("Google Ses Servisine ulaşılamadı.")
-        return None
-    except Exception as e:
-        print(f"Ses hatası: {e}") 
-        return None
 
-# 3. Home Assistant (Simülasyon veya Gerçek)
+# 3. Home Assistant (Simülasyon veya Gerçek - Görsel İkonlar Eklendi)
 def send_to_ha(action):
     entity_id = action.get("entity_id")
     if not entity_id: return "Hata: Cihaz ID yok"
@@ -98,101 +119,115 @@ def send_to_ha(action):
         try:
             domain = entity_id.split('.')[0]
             service = "turn_on" if action.get("state") in ["on", "open"] else "turn_off"
-            
-            # Service call URL
             url = f"{HA_URL}/api/services/{domain}/{service}"
             headers = {"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}
-            
             payload = {"entity_id": entity_id}
             for k, v in action.items():
                 if k not in ["entity_id", "state"]:
                     payload[k] = v
-            
             requests.post(url, headers=headers, json=payload, timeout=2)
-            return f"✅ HA İletildi: {device_name}"
+            return f"✅ **HA (Gerçek):** {device_name} İletildi"
         except Exception as e:
             return f"❌ HA Hatası: {str(e)}"
             
-    # Yoksa SİMÜLASYON Cevabı Dön
-    state_str = "AÇILDI" if action.get("state") in ["on", "open"] else "KAPATILDI"
-    if "scene" in entity_id: state_str = "AKTİF EDİLDİ"
+    # SİMÜLASYON Cevabı
+    state_str = "AÇILDI 🟢" if action.get("state") in ["on", "open"] else "KAPATILDI 🔴"
+    if "scene" in entity_id: state_str = "AKTİF EDİLDİ 🎬"
     
     details = []
     if "brightness_pct" in action: details.append(f"%{action['brightness_pct']} Parlaklık")
     if "temperature" in action: details.append(f"{action['temperature']}°C")
     
     detail_str = f"({', '.join(details)})" if details else ""
-    return f"🛠️ SİMÜLASYON: **{device_name}** {state_str} {detail_str}"
+    return f"🛠️ **SİMÜLASYON:** {device_name} → {state_str} {detail_str}"
 
 def process_timer(entity_id, delay, action):
     time.sleep(delay)
     res = send_to_ha({"entity_id": entity_id, **action})
     print(f"Zamanlayıcı Bitti: {res}")
 
-# Kullanıcı Adı Yönetimi
+# Kullanıcı Adı Yönetimi (Şık Form)
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
 if not st.session_state.user_name:
     with st.form("name_form"):
-        st.write("Merhaba! Adın nedir?")
-        name_input = st.text_input("Adını gir")
-        if st.form_submit_button("Kaydet") and name_input.strip():
+        st.subheader("👋 Hoş Geldiniz")
+        st.write("Sistemi başlatmak için adınızı girin.")
+        name_input = st.text_input("Adınız")
+        if st.form_submit_button("Sistemi Başlat 🚀") and name_input.strip():
             st.session_state.user_name = name_input.strip().split()[0]
             st.rerun()
 else:
     user_name = st.session_state.user_name
 
-# --- ARAYÜZ (UI) ---
-st.title("🏠 Grok AI Konfor Asistanı")
-temp, desc = get_real_temperature()
-st.info(f"📍 Ankara: {temp}°C, {desc}")
+# --- ARAYÜZ YERLEŞİMİ (DASHBOARD) ---
+# Üst Kısım: Hava Durumu Kartları
+col1, col2, col3, col4 = st.columns(4)
+temp, desc, hum, wind = get_real_temperature()
+
+with col1:
+    st.metric(label="📍 Konum", value="Ankara")
+with col2:
+    st.metric(label="🌡️ Sıcaklık", value=f"{temp} °C", delta=desc)
+with col3:
+    st.metric(label="💧 Nem", value=f"%{hum}")
+with col4:
+    st.metric(label="💨 Rüzgar", value=f"{wind} km/s")
+
+st.divider()
 
 # Yan Panel: Ses Kaydedici
 with st.sidebar:
-    st.header("🎤 Sesli Komut")
-    st.write("Butona basıp konuşun:")
+    st.image("https://cdn-icons-png.flaticon.com/512/4712/4712035.png", width=80)
+    st.title("Kontrol Paneli")
+    st.markdown("---")
+    st.write("🎙️ **Sesli Komut**")
     
-    # Mikrofon bileşeni
-    audio = mic_recorder(start_prompt="🔴 Kaydı Başlat", stop_prompt="⏹ Kaydı Bitir", key="recorder")
+    audio = mic_recorder(start_prompt="🔴 Kaydı Başlat", stop_prompt="⏹ Bitir", key="recorder")
     
     decoded_text = None
     if audio:
-        st.spinner("Ses yazıya çevriliyor...")
-        decoded_text = transcribe_audio_free(audio["bytes"])
+        with st.spinner("Ses işleniyor..."):
+            decoded_text = transcribe_audio_free(audio["bytes"])
         if decoded_text:
             st.success(f"Algılanan: '{decoded_text}'")
         else:
-            st.warning("Ses anlaşılamadı, tekrar deneyin.")
+            st.warning("Ses anlaşılamadı.")
+    
+    st.markdown("---")
+    st.info("💡 İpucu: 'Sabah modunu aç' veya '30dk sonra ışığı kapat' diyebilirsiniz.")
 
 # Sohbet Geçmişi
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {user_name}! Evin kontrolü bende. Sesli veya yazılı komut verebilirsin."}]
+    st.session_state.messages = [{"role": "assistant", "content": f"Merhaba {user_name}! Evin kontrolü bende. Ne yapmak istersin?"}]
 
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    if msg["role"] == "user":
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(msg["content"])
+    else:
+        with st.chat_message("assistant", avatar="🧠"):
+            st.markdown(msg["content"])
 
-# Komut Girişi (Ses varsa onu al, yoksa yazı kutusuna bak)
+# Komut Girişi
 prompt = None
 if decoded_text:
-    prompt = decoded_text # Ses öncelikli
-elif chat_input := st.chat_input("Komut yaz..."):
-    prompt = chat_input # Yazı yedeği
+    prompt = decoded_text
+elif chat_input := st.chat_input("Komutunuzu yazın..."):
+    prompt = chat_input
 
 # --- ANA MANTIK ---
 if prompt:
-    # 1. Kullanıcı mesajını ekle
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
-    # 2. Grok Cevabı
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="🧠"):
         placeholder = st.empty()
-        placeholder.markdown("🧠 *Grok düşünüyor...*")
+        placeholder.markdown("⏳ *Grok düşünüyor...*")
 
-        # --- SYSTEM PROMPT (ORİJİNAL, DEĞİŞTİRİLMEDİ) ---
+        # --- SYSTEM PROMPT (DOKUNULMADI - TAM OLARAK İSTEDİĞİN GİBİ) ---
         system_prompt = f"""
         Sen dünyanın en gelişmiş, Türkçe doğal dil işleyen, samimi ve konfor odaklı akıllı ev asistanısın. Kullanıcı komutlarını insan gibi anla, bağlamı hatırla, alışkanlıkları tahmin et. Kullanıcının adı {user_name}.
         Şu an Ankara'da hava {temp}°C ve {desc}.
@@ -248,12 +283,11 @@ if prompt:
         """
 
         messages_api = [{"role": "system", "content": system_prompt}]
-        # Son 10 mesajı hafızaya al
         for m in st.session_state.messages[-10:]:
             messages_api.append({"role": m["role"], "content": m["content"]})
 
         try:
-            # Grok API Çağrısı (İstenilen Model: grok-4-1-fast-reasoning)
+            # Grok API Çağrısı (Model Korundu: grok-4-1-fast-reasoning)
             response = client.chat.completions.create(
                 model="grok-4-1-fast-reasoning", 
                 messages=messages_api, 
@@ -262,7 +296,6 @@ if prompt:
             )
             grok_content = response.choices[0].message.content.strip()
             
-            # JSON Parse Etme
             if "```json" in grok_content:
                 grok_content = grok_content.replace("```json", "").replace("```", "").strip()
             
@@ -270,38 +303,32 @@ if prompt:
                 data = json.loads(grok_content)
                 bot_reply = data.get("response", "İşlem yapıldı.")
                 
-                # Aksiyonları Uygula (Simülasyon veya Gerçek HA)
                 action_logs = []
                 if "actions" in data:
                     for action in data["actions"]:
                         res = send_to_ha(action)
                         action_logs.append(res)
                 
-                # Zamanlayıcıları Başlat
                 if "timers" in data:
                     for timer in data["timers"]:
                         delay = timer.get("delay_seconds", 0)
-                        # String gelirse (örn: "sabah7_hesapla") demo için 5 saniye yap
                         if isinstance(delay, str): delay = 5 
-                        
                         entity = timer.get("entity_id")
                         act = {k:v for k,v in timer.items() if k not in ['delay_seconds', 'entity_id', 'repeat', 'duration']}
-                        
                         threading.Thread(target=process_timer, args=(entity, delay, act)).start()
                         
                         tekrar = f" (Tekrar: {timer.get('repeat')})" if "repeat" in timer else ""
-                        action_logs.append(f"⏰ Zamanlayıcı: {ENTITY_NAMES.get(entity, entity)} {delay}sn sonra {tekrar}")
+                        action_logs.append(f"⏰ **Zamanlayıcı:** {ENTITY_NAMES.get(entity, entity)} ({delay}sn) {tekrar}")
 
-                # Final Cevabı Göster
-                final_text = bot_reply
+                # Final Gösterim (Daha Şık)
+                final_html = f"**{bot_reply}**\n\n"
                 if action_logs:
-                    final_text += "\n\n" + "\n".join(action_logs)
+                    final_html += "---\n" + "\n\n".join(action_logs)
                 
-                placeholder.markdown(final_text)
-                st.session_state.messages.append({"role": "assistant", "content": final_text})
+                placeholder.markdown(final_html)
+                st.session_state.messages.append({"role": "assistant", "content": final_html})
 
             except json.JSONDecodeError:
-                # JSON hatası olursa ham metni göster
                 placeholder.markdown(grok_content)
                 st.session_state.messages.append({"role": "assistant", "content": grok_content})
 
